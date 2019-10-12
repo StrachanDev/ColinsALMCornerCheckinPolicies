@@ -5,7 +5,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Net.Http;
 using System.Windows.Forms;
+using Newtonsoft.Json;
+using System.Text;
+using System.Threading.Tasks;
+using System.Threading;
 
 namespace ColinsALMCheckinPolicies
 {
@@ -143,13 +148,20 @@ namespace ColinsALMCheckinPolicies
 				}
 				else
 				{
-					if (Config.CheckOnlyMostRecentReview)
-					{
-						var request = requests.OrderBy(p => p.WorkItem.CreatedDate).Last();
-						if (!RequestWasSuccessfullyCompleted(request.WorkItem))
-						{
-							hasBeenReviewed = false;
-						}
+                    if (Config.CheckOnlyMostRecentReview)
+                    {
+                        var request = requests.OrderBy(p => p.WorkItem.CreatedDate).Last();
+                        if (!RequestWasSuccessfullyCompleted(request.WorkItem))
+                        {
+                            hasBeenReviewed = false;
+                        }
+                        else
+                        {
+                            if (!EnsureWorkItemsUpdated(pendingCheckin.WorkItems.CheckedWorkItems, request.WorkItem.Id))
+                            {
+                                failures.Add(new PolicyFailure("Attempted to updated the passed state but couldn't.  Refresh this item to try again.", this));
+                            }
+                        }
 					}
 					else
 					{
@@ -158,10 +170,16 @@ namespace ColinsALMCheckinPolicies
 							if (!RequestWasSuccessfullyCompleted(request.WorkItem))
 							{
 								hasBeenReviewed = false;
-								break;
 							}
-						}
-					}
+                            else
+                            {
+                                if (!EnsureWorkItemsUpdated(pendingCheckin.WorkItems.CheckedWorkItems, request.WorkItem.Id))
+                                {
+                                    failures.Add(new PolicyFailure("Attempted to updated the passed state but couldn't.  Refresh this item to try again.", this));
+                                }
+                            }
+                        }
+                    }
 				}
 
 				if (!hasBeenReviewed)
@@ -173,7 +191,50 @@ namespace ColinsALMCheckinPolicies
 			return failures.ToArray();
 		}
 
-		private bool RequestWasSuccessfullyCompleted(WorkItem codeReviewRequest)
+        private bool EnsureWorkItemsUpdated(WorkItemCheckinInfo[] checkedWorkItems, int workItemId)
+        {
+            using (var client = new HttpClient())
+            {
+                var result = false;
+                try
+                {
+                    var tasks = new List<Task>();
+
+                    var tokenSource = new CancellationTokenSource();
+
+                    foreach (var cwi in checkedWorkItems.Where(wi => !wi.WorkItem.History.Contains($"CodeReviewPolicy PASSED {workItemId}")))
+                    {
+                        var content = new StringContent(
+                                            JsonConvert.SerializeObject(
+                                                new[] {
+                                            new {
+                                            op = "add",
+                                                path = "/fields/System.History",
+                                                value = $"CodeReviewPolicy PASSED {workItemId}"
+                                            }
+                                                }),
+                                            Encoding.UTF8,
+                                            "application/json");
+
+                        tasks.Add(client.SendAsync(new HttpRequestMessage(new HttpMethod("PATCH"), $"https://tfsserver:8080/tfs/RMS/{cwi.WorkItem.Project.Name}/_apis/wit/workitems/{workItemId}/api-version=5.0") { Content = content }, tokenSource.Token));
+                    }
+
+                    if (!Task.WaitAll(tasks.ToArray(), 30000))
+                    {
+                        tokenSource.Cancel();
+                        result = false;
+                    }
+                }
+                catch
+                {
+                    result = false;
+                }
+
+                return result;
+            }
+        }
+
+        private bool RequestWasSuccessfullyCompleted(WorkItem codeReviewRequest)
 		{
 			if (Config.RequireReviewToBeClosed)
 			{

@@ -1,12 +1,12 @@
 ﻿using Microsoft.TeamFoundation.VersionControl.Client;
-using Microsoft.TeamFoundation.VersionControl.Controls.Common;
+using Microsoft.TeamFoundation.VersionControl.Controls;
 using System;
 using System.Linq;
 using System.Windows.Forms;
 
 namespace ColinsALMCheckinPolicies
 {
-	public partial class CodeReviewPolicyForm : Form
+    public partial class CodeReviewPolicyForm : Form
 	{
 		public CodeReviewPolicyConfig Config { get; private set; }
 		public VersionControlServer VCServer { get; private set; }

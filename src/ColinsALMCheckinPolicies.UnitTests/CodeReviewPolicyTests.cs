@@ -1,5 +1,4 @@
-﻿using Microsoft.QualityTools.Testing.Fakes;
-using Microsoft.TeamFoundation.VersionControl.Client;
+﻿using Microsoft.TeamFoundation.VersionControl.Client;
 using Microsoft.TeamFoundation.VersionControl.Client.Fakes;
 using Microsoft.TeamFoundation.WorkItemTracking.Client;
 using Microsoft.TeamFoundation.WorkItemTracking.Client.Fakes;
